@@ -975,10 +975,10 @@ function toast(t){ const el=document.createElement("div"); el.className="toast";
 
 /* ---------- clock ---------- */
 function renderClock(){
-  const tk = takenCount(); const hasPick = !!S.myPick; const before = hasPick? S.myPick-1 : TOTAL; const left = Math.max(0, before-tk);
+  const tk = takenCount(); const hasPick = !!S.myPick; const before = hasPick? S.myPick-1 : TOTAL; const useQ = !!(LIVE.on && LIVE.queue && !LIVE.err); const left = useQ&&hasPick ? Math.max(0, S.myPick-LIVE.queue+(S.myPick>LIVE.queue?(LIVE.skipped||0):0)) : Math.max(0, before-tk);
   $("#takenN").textContent = tk;
   $("#meter").style.width = Math.min(100, tk/Math.max(1,before)*100)+"%";
-  $("#myPickSub").textContent = !hasPick ? L("ใส่ลำดับที่ในรุ่นของคุณ","Enter your class rank") : left>0 ? L(`อีก ${left} คนก่อนถึงคิวคุณ`,`${left} pick${left===1?"":"s"} before your turn`) : L("ถึงคิวคุณแล้ว (หรือเลยมาแล้ว)","It's your turn (or past it)");
+  $("#myPickSub").textContent = !hasPick ? L("ใส่ลำดับที่ในรุ่นของคุณ","Enter your class rank") : left>0 ? L(`อีก ${left} ${useQ?"คิว":"คน"}ก่อนถึงคิวคุณ`,`${left} ${useQ?"turn":"pick"}${left===1?"":"s"} before yours`) : L("ถึงคิวคุณแล้ว (หรือเลยมาแล้ว)","It's your turn (or past it)");
   const best = S.order.map(k=>UM[k]).find(u=>openCount(u)>0);
   if(best){ $("#bestName").textContent = best.name; $("#bestSub").textContent = L(`อันดับ ${rankOf(best.key)} ของคุณ`,`Your #${rankOf(best.key)}`)+` · ${best.city||best.prov}`; }
   else { $("#bestName").textContent="—"; $("#bestSub").textContent=""; }
@@ -1324,19 +1324,21 @@ $("#restoreFile").addEventListener("change",async e=>{
 const LIVE_URL = "https://izujreipvtsnldgpdynu.supabase.co/rest/v1/positions?select=id,status&order=id.asc";
 const LIVE_KEY = "sb_publishable_p7MUWJqXpImPGqkGEfbiow_EDC1iRK2";
 const LIVE_EVERY = 10000;
+const LIVE_USERS = "https://izujreipvtsnldgpdynu.supabase.co/rest/v1/users?select=id&status=eq.WAITING";
+const LIVE_CFG = "https://izujreipvtsnldgpdynu.supabase.co/rest/v1/config?select=current_queue,system_status&limit=1";
 // their P001-P264 = general list, P265-P278 = security group, P279 = southern quota; our ROWS: G(264), P(1), S(14)
 function rpToPos(id){ const n=parseInt(String(id).replace(/\D/g,"")); if(!n) return null; const i = n<=264? n-1 : n<=278? n : n===279? 264 : -1; return ROWS[i]? ROWS[i][7] : null; }
 LIVE.timer=null; LIVE.sig="";
 function liveStatus(){
   const el=$("#liveStat"), mini=$("#liveMini");
-  let t="", cls="";
+  let t="", cls="", hid=0;
   if(!LIVE.on){ t=L("ปิดอยู่ ทำเครื่องหมายเองได้ตามปกติ","Off. Mark picks by hand as usual."); }
   else if(LIVE.err==="blocked"){ t=L("หน้านี้ใน claude.ai เชื่อมต่อเว็บอื่นไม่ได้ ใช้ไฟล์ HTML ที่ดาวน์โหลดแล้วเปิดในเบราว์เซอร์แทน","This claude.ai page can't reach other websites. Use the downloaded HTML file in a normal browser for live sync."); cls="err"; }
   else if(LIVE.err){ t=L("เชื่อมต่อไม่ได้ จะลองใหม่อัตโนมัติ","Can't connect. Retrying automatically."); cls="err"; }
-  else if(LIVE.at){ const n=Object.keys(LIVE.taken).length, h=Object.keys(LIVE.taken).filter(p=>S.liveIgnore[p]).length; t=L(`สด · ถูกเลือก ${n} ตำแหน่ง${h?` (ยกเลิกในแอปนี้ ${h})`:""} · อัปเดต ${new Date(LIVE.at).toLocaleTimeString("th-TH")}`,`Live · ${n} taken${h?` (${h} released here)`:""} · updated ${new Date(LIVE.at).toLocaleTimeString()}`); cls="on"; }
+  else if(LIVE.at){ const n=Object.keys(LIVE.taken).length, h=Object.keys(LIVE.taken).filter(p=>S.liveIgnore[p]).length, q=LIVE.queue?L(`คิวปัจจุบัน ${LIVE.queue}${LIVE.skipped?` (ข้ามไป ${LIVE.skipped} คน รอแอดมินเลือกให้)`:""} · `,`Queue now ${LIVE.queue}${LIVE.skipped?` (${LIVE.skipped} skipped, pending admin)`:""} · `):""; t=q+L(`เว็บสดถูกเลือก ${n} ตำแหน่ง${h?` · ยกเลิกในแอปนี้ ${h}`:""} · อัปเดต ${new Date(LIVE.at).toLocaleTimeString("th-TH")}`,`${n} taken on live site${h?` · ${h} released here`:""} · updated ${new Date(LIVE.at).toLocaleTimeString()}`); cls="on"; hid=h; }
   else { t=L("กำลังเชื่อมต่อ…","Connecting…"); }
-  if(el){ el.textContent=t; el.className="livestat "+cls; }
-  if(mini){ mini.textContent = LIVE.on&&LIVE.at&&!LIVE.err ? L(`สดจาก rpca79 · ${new Date(LIVE.at).toLocaleTimeString("th-TH")}`,`Live from rpca79 · ${new Date(LIVE.at).toLocaleTimeString()}`) : ""; mini.className="s livestat "+(LIVE.on&&LIVE.at&&!LIVE.err?"on":""); }
+  if(el){ el.textContent=t; el.className="livestat "+cls; if(hid){ const b=document.createElement("button"); b.type="button"; b.className="btn small"; b.id="liveRestore"; b.style.marginLeft="8px"; b.textContent=L("แสดงตามเว็บสดทั้งหมด","Show all live marks"); el.appendChild(b); } }
+  if(mini){ mini.textContent = LIVE.on&&LIVE.at&&!LIVE.err ? (LIVE.queue?L(`คิวปัจจุบัน ${LIVE.queue} · `,`Queue ${LIVE.queue} · `):"")+L(`สดจาก rpca79 · ${new Date(LIVE.at).toLocaleTimeString("th-TH")}`,`Live from rpca79 · ${new Date(LIVE.at).toLocaleTimeString()}`) : ""; mini.className="s livestat "+(LIVE.on&&LIVE.at&&!LIVE.err?"on":""); }
 }
 async function livePoll(){
   if(!LIVE.on) return;
@@ -1345,6 +1347,8 @@ async function livePoll(){
     const r = await fetch(LIVE_URL,{headers:{apikey:LIVE_KEY}, cache:"no-store"});
     if(!r.ok) throw new Error("http "+r.status);
     const rows = await r.json();
+    try{ const c = await fetch(LIVE_CFG,{headers:{apikey:LIVE_KEY}, cache:"no-store"}); if(c.ok){ const cj=await c.json(); const q=cj&&cj[0]&&parseInt(cj[0].current_queue); if(q && q!==LIVE.queue){ LIVE.queue=q; LIVE.sig="q"; }
+      if(q){ const s = await fetch(LIVE_USERS+"&id=lt."+q,{headers:{apikey:LIVE_KEY}, cache:"no-store"}); if(s.ok){ const sj=await s.json(); const sk=Array.isArray(sj)?sj.length:0; if(sk!==LIVE.skipped){ LIVE.skipped=sk; LIVE.sig="s"; } } } } }catch(e){}
     const next={}; rows.forEach(x=>{ if(x.status && x.status!=="AVAILABLE"){ const p=rpToPos(x.id); if(p) next[p]=1; } });
     const sig=Object.keys(next).sort().join(",");
     const fresh = LIVE.at? Object.keys(next).filter(p=>!LIVE.taken[p]) : [];
@@ -1360,10 +1364,11 @@ function setLive(on){
   LIVE.on=on; $("#liveOn").checked=on;
   try{ localStorage.setItem("nrt79-live", on?"1":"0"); }catch(e){}
   clearTimeout(LIVE.timer);
-  if(on){ LIVE.err=null; livePoll(); } else { LIVE.taken={}; LIVE.sig=""; LIVE.at=0; renderAll(); }
+  if(on){ LIVE.err=null; livePoll(); } else { LIVE.taken={}; LIVE.sig=""; LIVE.at=0; LIVE.queue=0; LIVE.skipped=0; renderAll(); }
   liveStatus();
 }
 $("#liveOn").addEventListener("change",e=>setLive(e.target.checked));
+document.addEventListener("click",e=>{ if(e.target && e.target.id==="liveRestore"){ S.liveIgnore={}; persist(); renderAll(); liveStatus(); toast(L("แสดงตามเว็บสดครบแล้ว","Showing every live mark again")); } });
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && LIVE.on){ clearTimeout(LIVE.timer); livePoll(); } });
 
 /* ---------- road routing (OSRM, free) ---------- */
