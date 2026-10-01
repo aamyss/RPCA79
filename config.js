@@ -3,6 +3,6 @@
 // key: the publishable key (starts with sb_publishable_) or the legacy "anon public" key.
 // Leave them empty to turn sync off.
 window.NRT79_SYNC = {
-  url: "",
-  key: ""
+  url: "https://auknukmdgmyakyzippwp.supabase.co",
+  key: "sb_publishable_BcfvT9DGrxAP-ICAI04vmQ_hAmvqa_9"
 };
